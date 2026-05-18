@@ -1,0 +1,19 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"Makevars": "makefile",
+			"Makevars.in": "makefile",
+			"Makevars.win": "makefile",
+			"Makevars.win.in": "makefile",
+			"configure": "shellscript",
+			"configure.win": "shellscript",
+			"cleanup": "shellscript",
+			"cleanup.win": "shellscript"
+		}
+	}
+}

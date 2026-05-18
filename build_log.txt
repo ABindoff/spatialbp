@@ -1,0 +1,93 @@
+Rscript.exe : ? Updating spatialbp documentation
+At line:1 char:1
++ & "C:\Users\bindoffa\AppData\Local\Programs\R\R-4.6.0\bin\x64\Rscript ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (? Updating spatialbp documentation:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+? Loading spatialbp
+? Re-compiling spatialbp (debug build)
+-- R CMD INSTALL ---------------------------------------------------------------
+* installing *source* package 'spatialbp' ...
+
+** this is package 'spatialbp' version '0.1.0'
+
+** using staged installation
+
+Using cargo 1.95.0 (f2d3ce0bd 2026-03-21)
+
+Using rustc 1.95.0 (59807616e 2026-04-14)
+
+Creating DEBUG build.
+
+Writing `src/Makevars.win`.
+
+`tools/config.R` has finished.
+
+** libs
+
+using C compiler: 'gcc.exe (GCC) 14.3.0'
+
+gcc  -I"C:/Users/bindoffa/AppData/Local/Programs/R/R-4.6.0/include" -DNDEBUG     -I"C:/rtools45/x86_64-w64-mingw32.static.posix/include"      -O2 -Wall -std=gnu2x -gdwarf-2 -mfpmath=sse -msse2 -mstackrealign   -UNDEBUG -Wall -pedantic -g -O0 -c entrypoint.c -o entrypoint.o
+mkdir -p ./rust/target/libgcc_mock
+touch ./rust/target/libgcc_mock/libgcc_eh.a
+if [ -d ./vendor ]; then \
+	echo "=== Using offline vendor directory ==="; \
+	mkdir -p /c/Users/bindoffa/antigravity projects/spatialbp/src/.cargo && \
+	cp rust/vendor-config.toml /c/Users/bindoffa/antigravity projects/spatialbp/src/.cargo/config.toml; \
+elif [ -f ./rust/vendor.tar.xz ]; then \
+	echo "=== Using offline vendor tarball ==="; \
+	tar xf rust/vendor.tar.xz && \
+	mkdir -p /c/Users/bindoffa/antigravity projects/spatialbp/src/.cargo && \
+	cp rust/vendor-config.toml /c/Users/bindoffa/antigravity projects/spatialbp/src/.cargo/config.toml; \
+fi
+# Build the project using Cargo with additional flags
+export CARGO_HOME=/c/Users/bindoffa/antigravity projects/spatialbp/src/.cargo && \
+export LIBRARY_PATH=";/c/Users/bindoffa/antigravity projects/spatialbp/src/./rust/target/libgcc_mock" && \
+RUSTFLAGS=" --print=native-static-libs" cargo build  --target=x86_64-pc-windows-gnu --lib  --manifest-path=rust/Cargo.toml --target-dir=./rust/target
+/bin/sh: line 1: export: `projects/spatialbp/src/.cargo': not a valid identifier
+make: *** [Makevars.win:22: rust/target/x86_64-pc-windows-gnu/debug/libspatialbp.a] Error 1
+ERROR: compilation failed for package 'spatialbp'
+
+* removing 'C:/Users/bindoffa/AppData/Local/Temp/Rtmp2lep7m/devtools_install_f0681e7936d2/spatialbp'
+
+Error in `(function (command = NULL, args = character(), error_on_status = TRUE, …`:
+! System command 'Rcmd.exe' failed
+---
+Exit status: 1
+stdout & stderr: <printed>
+---
+Backtrace:
+ 1. devtools::document()
+ 2. roxygen2::roxygenise(pkg$path, roclets)
+ 3. local load_code(base_path)
+ 4. pkgload::load_all(path, helpers = FALSE, attach_testthat = FALSE)
+ 5. pkgbuild::compile_dll(path, quiet = quiet, debug = debug)
+ 6. pkgbuild:::withr_with_makevars(compiler_flags(debug), { …
+ 7. pkgbuild:::withr_with_envvar(c(R_MAKEVARS_USER = makevars_file), { …
+ 8. base::force(code)
+ 9. base::force(code)
+10. pkgbuild:::withr_with_envvar(c(DEBUG = "true"), build())
+11. base::force(code)
+12. pkgbuild::build()
+13. pkgbuild:::install_min(path, dest = install_dir, components = "libs", args = if (need…
+14. pkgbuild::rcmd_build_tools("INSTALL", c(path, paste("--library=", dest, …
+15. pkgbuild::with_build_tools({ …
+16. pkgbuild:::withr_with_path(rtools_path(), code)
+17. base::force(code)
+18. base::withCallingHandlers(callr::rcmd_safe(..., env = env, spinner = FALSE, …
+19. callr::rcmd_safe(..., env = env, spinner = FALSE, show = FALSE, …
+20. callr:::run_r(options)
+21. base::with(options, with_envvar(env, do.call(processx::run, c(list(bin, …
+22. base::with.default(options, with_envvar(env, do.call(processx::run, …
+23. base::eval(substitute(expr), data, enclos = parent.frame())
+24. base::eval(substitute(expr), data, enclos = parent.frame())
+25. callr:::with_envvar(env, do.call(processx::run, c(list(bin, args = real_cmdargs, …
+26. base::force(code)
+27. base::do.call(processx::run, c(list(bin, args = real_cmdargs, stdout_line_callba…
+28. (function (command = NULL, args = character(), error_on_status = TRUE, …
+29. base::throw(new_process_error(res, call = sys.call(), echo = echo, …
+30. | base::signalCondition(cond)
+31. (function (e) …
+32. asNamespace("callr")$err$throw(e)
+Execution halted

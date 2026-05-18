@@ -4,3 +4,7 @@
 ^src/rust/target$
 ^src/Makevars$
 ^src/Makevars\.win$
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.positai$
+^\.claude$

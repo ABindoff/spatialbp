@@ -1,0 +1,149 @@
+---
+title: "Getting Started with spatialbp"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with spatialbp}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+The `spatialbp` package is a high-performance R-Rust framework designed to identify **2D continuous spatial boundaries** (piecewise regression changepoints) in histology, multiplexed immunofluorescence (mIF), and spatial transcriptomics datasets.
+
+Rather than drawing rigid, manual Regions of Interest (ROIs), `spatialbp` uses a high-performance **Markov Chain Monte Carlo (MCMC) engine** written in Rust to dynamically discover continuous shared spatial boundaries based on the spatial gradients of your biological markers.
+
+---
+
+## 1. Installation & Setup
+
+To load the package in your active R session, run:
+
+```{r}
+library(spatialbp)
+```
+
+*Note for Windows users:* The package relies on a custom-designed Rtools/GCC linker built directly into the package's compilation pipeline, ensuring zero-dependency compilation.
+
+---
+
+## 2. Quick Start: Fitting a Single-Channel Boundary
+
+For biologists and lab scientists, `spatialbp` provides a simplified high-level wrapper function called `fit_spatial_boundary()`. This function automates all coordinates projection and MCMC step-size calibration.
+
+Let's simulate a standard 2D cortical gliosis tissue where astrocytes (GFAP) are highly reactive in the center:
+
+```{r, fig.width = 6, fig.height = 5}
+library(spatialbp)
+
+# Simulate cortical tissue grid (100x100 resolution)
+df <- simulate_cortical_tissue(n_grid = 100, noise = 0.2)
+
+# Fit the boundary in 1 simple line!
+fit_astro <- fit_spatial_boundary(
+  df = df, 
+  y1 = "Astrocytes", 
+  latent_type = "radial", 
+  iterations = 3000
+)
+
+# Plot the beautiful fitted boundary line
+plot(fit_astro)
+```
+
+The S3 plotting method automatically renders a gorgeous, high-contrast overlay of the estimated spatial boundary on top of your tissue intensity coordinates!
+
+---
+
+## 3. Joint Spatial Modeling: Affinity vs. Repulsion
+
+In spatial biology, markers often interact. The package supports **Joint Spatial Modeling** by tying the boundary parameters ($c$) across multiple channels:
+
+### A. Spatial Affinity (Co-localization)
+Two proteins (e.g. Astrocytes and Microglia) share the **same boundary** and exist on the **same side** of that boundary:
+* $Y_1 = \beta_1 \max(0, Z - c)$
+* $Y_2 = \beta_2 \max(0, Z - c)$
+
+### B. Spatial Repulsion (Exclusion/Segregation)
+Two markers (e.g. Microglia and Perineuronal Networks) share a physical boundary but are active on **opposite sides** of it:
+* $Y_1 = \beta_1 \max(0, Z - c)$ (Inside the boundary)
+* $Y_2 = \beta_2 \max(0, c - Z)$ (Outside the boundary)
+
+`fit_spatial_boundary()` automatically detects if your channels co-localize or segregate using their correlation, and runs the appropriate joint R-Rust MCMC fit:
+
+```{r, fig.width = 6, fig.height = 5}
+# Fit a joint repulsion model for Microglia and PNNs
+fit_joint <- fit_spatial_boundary(
+  df = df,
+  y1 = "Microglia",
+  y2 = "PNNs",
+  latent_type = "radial",
+  iterations = 3000
+)
+
+# Plot the joint boundary
+plot(fit_joint)
+```
+
+---
+
+## 4. Advanced: Automatic Relationship Discovery
+
+If you have many channels, you can automatically discover their spatial interactions without manually running pairs. The `discover_spatial_relationships()` function runs combinatorial pairwise joint models and outputs a **Bayesian Spatial Network**:
+
+```{r}
+# Define a list of your stains
+stains_list <- list(
+  Astrocytes = df$Astrocytes,
+  Microglia = df$Microglia,
+  PNNs = df$PNNs
+)
+
+# Run discovery
+results <- discover_spatial_relationships(
+  stains = stains_list,
+  latent_field = df$LatentInflame,
+  iterations = 2000,
+  bf_threshold = 10
+)
+
+# View the automatically classified network
+print(results$relationships)
+```
+
+This returns a clear table classifying each pair as **Affinity**, **Repulsion**, or **Independent** based on their joint MCMC Bayes Factors!
+
+---
+
+## 5. Bayesian MCMC Diagnostics
+
+To ensure your Bayesian models are valid and have reached stationarity, always check your MCMC trace plots:
+
+```{r, fig.width = 6, fig.height = 6}
+# Plot MCMC traces and posterior densities
+plot_diagnostics(fit_astro, warmup = 1000)
+```
+
+---
+
+## 6. Statistical Foundation (For Advanced Users)
+
+### The Piecewise Regression Likelihood
+Our framework models spatial intensity $Y$ using a continuous 1D latent coordinate $Z$ (e.g. cortical depth, radial distance from a center, or radial basis values):
+
+$$Y_i = \text{baseline}_i + \beta \max(0, Z_i - c) + \epsilon_i \quad \text{where} \quad \epsilon_i \sim \mathcal{N}(0, \sigma^2)$$
+
+### Laplace Priors (L1 Regularization)
+To support noise-filtering and handle multiple boundaries in complex datasets, `spatialbp` includes L1 regularization (Lasso priors) on the slope parameters $\beta_k$:
+
+$$\text{log\_likelihood} = -0.5 \cdot \text{SSE} - \sum_k \lambda_k |\beta_k|$$
+
+This shrinks inactive boundary channels to exactly 0, filtering out noise in multi-boundary environments!
+
+### High-Performance Rust MCMC Engine
+Because evaluating high-resolution grids ($10,000+$ pixels/voxels) for thousands of MCMC steps is computationally expensive in R, our likelihood calculation and random-walk Metropolis-Hastings loop are executed inside a **highly-optimized compiled Rust backend** using `extendr`. This completes thousands of iterations in under 2 seconds!

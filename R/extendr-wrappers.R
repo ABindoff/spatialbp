@@ -5,8 +5,30 @@
 #' @useDynLib spatialbp, .registration = TRUE
 NULL
 
-#' Return string `"Hello world!"` to R.
+#' Compute the Sum of Squared Errors (SSE) for the 2D Spatial Piecewise Model
 #' @export
-hello_world <- function() .Call(wrap__hello_world)
+compute_spatial_sse <- function(observed, baseline, latent, beta, c) .Call(wrap__compute_spatial_sse, observed, baseline, latent, beta, c)
+
+#' Run a Random Walk Metropolis-Hastings MCMC to fit the spatial breakpoint
+#' 
+#' @param observed The observed pixel intensities (multiplexed histology data)
+#' @param baseline The baseline spatial surface Z(x,y)
+#' @param latent The latent propensity field
+#' @param iterations Number of MCMC iterations
+#' @param init_beta Starting value for beta
+#' @param init_c Starting value for c
+#' @param sd_beta Proposal standard deviation for beta
+#' @param sd_c Proposal standard deviation for c
+#' @param lambda L1 (Laplace) regularization parameter for beta
+#' @export
+run_spatial_mcmc <- function(observed, baseline, latent, iterations, init_beta, init_c, sd_beta, sd_c, lambda) .Call(wrap__run_spatial_mcmc, observed, baseline, latent, iterations, init_beta, init_c, sd_beta, sd_c, lambda)
+
+#' Fit a Joint 2D Spatial Piecewise Regression Model
+#' 
+#' Supports both "affinity" (shared boundary, same direction) and
+#' "repulsion" (shared boundary, opposite directions) hypotheses.
+#' 
+#' @export
+run_joint_mcmc <- function(y1, y2, baseline1, baseline2, latent, mode, iterations, init_beta1, init_beta2, init_c, sd_beta1, sd_beta2, sd_c, lambda1, lambda2) .Call(wrap__run_joint_mcmc, y1, y2, baseline1, baseline2, latent, mode, iterations, init_beta1, init_beta2, init_c, sd_beta1, sd_beta2, sd_c, lambda1, lambda2)
 
 # nolint end
