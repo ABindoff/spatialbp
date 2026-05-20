@@ -1,8 +1,8 @@
 # spatialbp
 
-**2D Continuous Spatial Piecewise Regression**
+**k-Dimensional Continuous Spatial Piecewise Regression**
 
-`spatialbp` is an R package with Rust bindings that extends 1D piecewise regression into two dimensions. It fits 2D spatial surfaces stitched together at 1D boundary curves to detect spatial regimes, affinity, and repulsion in continuous spatial fields.
+`spatialbp` is an R package with Rust bindings that extends 1D piecewise regression into k-dimensions. It fits k-dimensional spatial surfaces stitched together at (k-1)-dimensional boundary curves/surfaces to detect spatial regimes, affinity, and repulsion in continuous spatial fields.
 
 > [!WARNING]
 > **Work In Progress**
@@ -21,4 +21,4 @@ remotes::install_github("ABindoff/spatialbp")
 
 ## Overview
 
-The `spatialbp` package provides tools to discover spatial relationships and boundaries between interacting variables or species. By fitting piecewise surfaces across a 2D spatial domain, you can estimate abrupt transition zones (ecotones) and map out regions of competitive co-dependence or biological affinity.
+The `spatialbp` package provides tools to discover spatial relationships and boundaries between interacting variables or species. By fitting piecewise surfaces across a k-dimensional spatial domain, you can estimate abrupt transition zones (ecotones) and map out regions of competitive co-dependence or biological affinity.
