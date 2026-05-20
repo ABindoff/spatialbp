@@ -1,0 +1,133 @@
+---
+title: "Organic Topologies: Density and Distance Fields"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Organic Topologies: Density and Distance Fields}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+Real-world biological and ecological communities rarely conform to simple geometric boundaries (like straight lines or perfect circles). Organisms often form scattered, highly irregular, organic patches across a landscape. 
+
+When dealing with such chaotic spatial distributions, we can abandon geometric coordinates (X/Y) entirely. Instead, we project the boundaries into **Density Space** or **Distance Space**. 
+
+By utilizing continuous topographical fields, `spatialbp` can effortlessly identify complex, asymmetrical boundaries wrapping around dozens of scattered communities simultaneously!
+
+## 1. Simulating an Organic, Scattered Landscape
+
+Let's generate a synthetic ecosystem where:
+1. **Green (Host)**: Forms 5 random, scattered patches across the landscape.
+2. **Red (Affinity)**: Forms scattered patches that strongly cluster *around* the Green patches.
+3. **Blue (Repulsion)**: Forms scattered patches strictly in the voids *away* from Green patches.
+
+```{r, fig.width=9, fig.height=3.5}
+library(spatialbp)
+library(ggplot2)
+library(patchwork)
+
+set.seed(123)
+
+# 1. Generate Community "Seeds"
+green_seeds <- data.frame(x = runif(5, 10, 90), y = runif(5, 10, 90))
+
+# Red seeds cluster near Green (Affinity)
+red_seeds <- data.frame(
+  x = green_seeds$x + rnorm(5, 0, 8),
+  y = green_seeds$y + rnorm(5, 0, 8)
+)
+
+# Blue seeds avoid Green (Repulsion)
+blue_seeds <- data.frame(
+  x = c(10, 90, 50, 20, 80),
+  y = c(90, 10, 90, 20, 80)
+)
+
+# 2. Build the Spatial Raster Grid
+grid_size <- 100
+df <- expand.grid(x = 1:grid_size, y = 1:grid_size)
+
+# Helper function to compute inverse-distance-weighted density from seeds
+compute_colony <- function(seeds, grid_x, grid_y, scale=10) {
+  dens <- rep(0, length(grid_x))
+  for(i in 1:nrow(seeds)) {
+    d <- sqrt((grid_x - seeds$x[i])^2 + (grid_y - seeds$y[i])^2)
+    dens <- dens + exp(-d^2 / (2 * scale^2))
+  }
+  return(dens * 50) # Scale intensity
+}
+
+df$Green <- compute_colony(green_seeds, df$x, df$y, scale=10) + rnorm(nrow(df), 0, 2)
+df$Red   <- compute_colony(red_seeds, df$x, df$y, scale=12) + rnorm(nrow(df), 0, 2)
+df$Blue  <- compute_colony(blue_seeds, df$x, df$y, scale=15) + rnorm(nrow(df), 0, 2)
+
+df$Green <- pmax(0, df$Green)
+df$Red   <- pmax(0, df$Red)
+df$Blue  <- pmax(0, df$Blue)
+
+# Visualize the chaotic patches
+p_green <- ggplot(df, aes(x, y, fill = Green)) + geom_raster() + scale_fill_viridis_c(option="mako") + theme_void() + labs(title="Green (Host)")
+p_red <- ggplot(df, aes(x, y, fill = Red)) + geom_raster() + scale_fill_viridis_c(option="inferno") + theme_void() + labs(title="Red (Affinity)")
+p_blue <- ggplot(df, aes(x, y, fill = Blue)) + geom_raster() + scale_fill_viridis_c(option="plasma") + theme_void() + labs(title="Blue (Repulsion)")
+
+p_green | p_red | p_blue
+```
+
+## 2. Using Distance Space
+
+Instead of manually drawing regions of interest, we can compute the continuous **Nearest-Neighbor Distance Field** relative to the `Green` host. We use the built-in `compute_latent_distance` helper.
+
+```{r, fig.width=8, fig.height=4}
+# Extract the coordinates of high-density Green regions to act as our "Host Sources"
+green_sources <- subset(df, Green > 25)
+
+# Compute the distance from every pixel to the nearest Green source
+df$Dist_to_Green <- compute_latent_distance(df$x, df$y, green_sources$x, green_sources$y)
+
+# Fit the multi-species interaction against Distance Space
+fit_distance <- spatialbp(
+  cbind(Red, Blue) ~ Dist_to_Green + hinge(latent = Dist_to_Green),
+  data = df,
+  iterations = 2000, warmup = 1000
+)
+
+# Plot the results
+plot(fit_distance, facet_by="none")
+```
+
+The model automatically discovered the exact distance radius surrounding **every single scattered Green colony simultaneously**.
+
+### The `confint()` Method
+You can extract Highest Density Intervals (HDIs) for the estimated boundary parameter `c` using the standard `confint()` S3 method:
+
+```{r}
+confint(fit_distance, parm = "cp", level = 0.95)
+```
+
+
+## 3. Using Density Space (Kernel Trick)
+
+Alternatively, we can abandon physical distance entirely and map the relationships purely in **Density Space**. We define the latent field as the Kernel Density Estimate (KDE) of the `Green` communities using `compute_latent_density`.
+
+```{r, fig.width=8, fig.height=4}
+# Compute the Kernel Density Field of the Host
+df$KDE_Green <- compute_latent_density(df$x, df$y, green_sources$x, green_sources$y)
+
+# Fit the multi-species interaction against Density Space
+fit_density <- spatialbp(
+  cbind(Red, Blue) ~ KDE_Green + hinge(latent = KDE_Green),
+  data = df,
+  iterations = 2000, warmup = 1000
+)
+
+# Extract 95% Confidence Intervals for the Density Threshold
+confint(fit_density, parm = "cp", level = 0.95)
+```
+
+By substituting geometric constraints with topographical fields (Distance or Density), `spatialbp` translates chaotic, multi-patch landscapes into elegant mathematical rules!

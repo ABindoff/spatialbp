@@ -71,8 +71,11 @@ We extract a 3D Region of Interest (ROI) centered around the central white matte
 
 ```{r}
 # Define 3D bounding box for the ROI
-x_range <- 35:55
-y_range <- 45:65
+# x_range <- 35:55
+# y_range <- 45:65
+# z_range <- 43:47
+x_range <- 5:86
+y_range <- 5:104
 z_range <- 43:47
 
 grid_3d <- expand.grid(x = x_range, y = y_range, z = z_range)
@@ -87,58 +90,77 @@ grid_3d$y <- grid_3d$y - min(grid_3d$y)
 
 ---
 
-## 3. Defining an Organic, Non-Geometric Latent Gradient
+## 3. Injecting a 3D Synthetic Pathology (Tumor)
+To demonstrate the spatial piecewise boundary without interference from the NIfTI 'LR' text watermarks embedded in the sample image, we will inject a synthetic **3D irregular tumor/lesion** into the left frontal lobe. 
 
-To model realistic brain structures (such as the ventricular wall or the longitudinal cleft) rather than forcing contrived, perfect circles, we define our continuous latent spatial gradient using the **distance to an elongated, crescent-like ventricular skeleton**:
+We define our continuous latent spatial gradient as the **distance to an irregular, dumbbell-shaped tumor core**:
 
-```{r}
-# 1. Define ventricular core centroids representing the crescent skeleton
-centers <- matrix(c(
-  10, 5,
-  11, 8,
-  12, 11,
-  11, 14,
-  10, 17
-), ncol = 2, byrow = TRUE)
+```{r, fig.width=6, fig.height=5}
+# 1. Define two overlapping tumor centers to create an irregular dumbbell shape
+tumor_centers <- matrix(c(
+  20, 60, 45,
+  35, 50, 45
+), ncol = 3, byrow = TRUE)
 
-# 2. Calculate minimum distance to this elongated ventricular core
+# 2. Calculate 3D Euclidean distance to the nearest tumor core
 dists <- apply(grid_3d, 1, function(row) {
-  min(sqrt((row["x"] - centers[, 1])^2 + (row["y"] - centers[, 2])^2))
+  min(sqrt((row["x"] - tumor_centers[, 1])^2 + 
+           (row["y"] - tumor_centers[, 2])^2 + 
+           (row["z"] - tumor_centers[, 3])^2))
 })
 
-# 3. Construct a spatially continuous organic latent field
-# (high value near the ventricle skeleton, decreasing outwards)
-grid_3d$Latent_WM <- 10 - dists
+# 3. Construct a spatially continuous latent field (high value = tumor core)
+grid_3d$Latent_Tumor <- 30 - dists
 
-# 4. Simulate corresponding DTI FA channel matching the real T1 structures
+# 4. Inject the tumor pathology: sharp drop in T1 MRI intensity inside the tumor boundary
+# The true boundary is at distance = 15 (Latent_Tumor = 15)
+true_boundary <- 15
+tumor_mask <- grid_3d$Latent_Tumor > true_boundary
+
+# Keep an original copy of T1_MRI for comparison
+grid_3d$T1_MRI_Original <- grid_3d$T1_MRI
+
+# Apply pathology to the real T1 MRI baseline
+grid_3d$T1_MRI[tumor_mask] <- grid_3d$T1_MRI[tumor_mask] * 0.4
+
+# Simulate corresponding DTI FA channel matching the structural pathology
 set.seed(42)
 grid_3d$DTI_FA <- 0.15 + 0.55 * (grid_3d$T1_MRI / max(grid_3d$T1_MRI)) + rnorm(nrow(grid_3d), 0, 0.05)
+
+# 5. Visualize the injected tumor over the real MRI background
+library(ggplot2)
+slice_df <- subset(grid_3d, z == 45)
+ggplot(slice_df, aes(x = x, y = y)) +
+  geom_raster(aes(fill = T1_MRI)) +
+  scale_fill_viridis_c(option = "magma", name = "T1 MRI") +
+  geom_contour(aes(z = Latent_Tumor), breaks = true_boundary, color = "white", linetype = "dashed", linewidth = 1) +
+  labs(title = "Synthetic Irregular Tumor Injection", subtitle = "White dashed line indicates the true 3D boundary shell") +
+  theme_minimal()
 ```
 
 ---
 
-## 4. Fitting the 3D Anatomical Boundary
+## 4. Fitting the 3D Pathological Boundary
 
-Because both T1-intensity and FA values are elevated within the white matter tract, they share the **same spatial boundary** in 3D (a **Joint Affinity** relationship). 
+Because both T1-intensity and FA values drop sharply within the tumor, they share the **same spatial boundary** in 3D (a **Joint Affinity** relationship). 
 
-We fit the 3D boundary across all 2,205 voxels in a single line of code! Our Rust MCMC engine processes the 3D voxel grid in under a second:
+We fit the 3D boundary across all voxels in a single line of code! Our Rust MCMC engine scales efficiently across the grid.
 
 ```{r}
 # Fit the 3D boundary jointly across real T1 MRI and DTI FA voxels!
-# We increase iterations to 5000 for superb posterior mapping.
-fit_3d <- fit_spatial_boundary(
-  df = grid_3d,
-  y1 = "T1_MRI",
-  y2 = "DTI_FA",
-  latent_col = "Latent_WM", # Use the pre-computed organic anatomical gradient!
-  iterations = 5000
+fit_3d <- spatialbp(
+  cbind(T1_MRI, DTI_FA) ~ x + y + hinge(latent = Latent_Tumor),
+  data = grid_3d,
+  iterations = 5000,
+  warmup = 2500
 )
 
-# Extract estimated 3D boundary changepoint c
-cat("Estimated 3D Anatomical White Matter boundary changepoint:", round(fit_3d$optimal_c, 3), "\n")
+# Extract estimated 3D boundary changepoint cp
+opt_c_3d <- median(fit_3d$traces$cp)
+cat("Estimated 3D Anatomical White Matter boundary changepoint:", round(opt_c_3d, 3), "\n")
 ```
 
-The MCMC sampler converges on a clear physical boundary at $c \approx 9.99$. 
+The MCMC sampler converges on a clear physical boundary at $c \approx$ `r round(opt_c_3d, 3)`. 
 
 ---
 
@@ -162,7 +184,7 @@ To verify that the MCMC chains have fully converged and mixed well across the ma
 
 ```{r, fig.width = 6, fig.height = 6}
 # Generate and display MCMC diagnostics
-plot_diagnostics(fit_3d, warmup = 1000)
+plot_diagnostics(fit_3d)
 ```
 
 ---

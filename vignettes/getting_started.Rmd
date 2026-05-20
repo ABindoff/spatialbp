@@ -34,7 +34,7 @@ library(spatialbp)
 
 ## 2. Quick Start: Fitting a Single-Channel Boundary
 
-For biologists and lab scientists, `spatialbp` provides a simplified high-level wrapper function called `fit_spatial_boundary()`. This function automates all coordinates projection and MCMC step-size calibration.
+For biologists and lab scientists, `spatialbp` provides a highly expressive **formula interface**, similar to `lm()` or `lme4()`. This allows you to easily specify covariates, conditional boundaries, and smooth ecotone transitions.
 
 Let's simulate a standard 2D cortical gliosis tissue where astrocytes (GFAP) are highly reactive in the center:
 
@@ -42,81 +42,70 @@ Let's simulate a standard 2D cortical gliosis tissue where astrocytes (GFAP) are
 library(spatialbp)
 
 # Simulate cortical tissue grid (100x100 resolution)
-df <- simulate_cortical_tissue(n_grid = 100, noise = 0.2)
+# df will contain intensity channels (Astrocytes, Microglia) and a latent radial gradient (radial_z)
+set.seed(42)
+df <- data.frame(
+  Astrocytes = rnorm(1000, 10, 2),
+  Microglia = rnorm(1000, 5, 1),
+  PNNs = rnorm(1000, 2, 0.5),
+  radial_z = runif(1000, 0, 100),
+  tissue_thickness = rnorm(1000, 20, 5),
+  oxygen = runif(1000, 0, 1)
+)
 
-# Fit the boundary in 1 simple line!
-fit_astro <- fit_spatial_boundary(
-  df = df, 
-  y1 = "Astrocytes", 
-  latent_type = "radial", 
+# Fit the boundary using the formula interface!
+fit_astro <- spatialbp(
+  Astrocytes ~ 1 + hinge(latent = radial_z),
+  data = df,
   iterations = 3000
 )
 
-# Plot the beautiful fitted boundary line
-plot(fit_astro)
+# You can access the MCMC traces easily:
+str(fit_astro$traces)
 ```
-
-The S3 plotting method automatically renders a gorgeous, high-contrast overlay of the estimated spatial boundary on top of your tissue intensity coordinates!
 
 ---
 
-## 3. Joint Spatial Modeling: Affinity vs. Repulsion
+## 3. Joint Spatial Modeling: Multivariate Responses
 
-In spatial biology, markers often interact. The package supports **Joint Spatial Modeling** by tying the boundary parameters ($c$) across multiple channels:
+In spatial biology, markers often interact. The package supports **Joint Multivariate Spatial Modeling** by binding multiple responses together. The model will automatically tie the boundary parameter ($c$) across multiple channels, but estimate independent slopes ($\beta$) and baseline offsets.
 
-### A. Spatial Affinity (Co-localization)
-Two proteins (e.g. Astrocytes and Microglia) share the **same boundary** and exist on the **same side** of that boundary:
-* $Y_1 = \beta_1 \max(0, Z - c)$
-* $Y_2 = \beta_2 \max(0, Z - c)$
+### Joint Fitting
 
-### B. Spatial Repulsion (Exclusion/Segregation)
-Two markers (e.g. Microglia and Perineuronal Networks) share a physical boundary but are active on **opposite sides** of it:
-* $Y_1 = \beta_1 \max(0, Z - c)$ (Inside the boundary)
-* $Y_2 = \beta_2 \max(0, c - Z)$ (Outside the boundary)
-
-`fit_spatial_boundary()` automatically detects if your channels co-localize or segregate using their correlation, and runs the appropriate joint R-Rust MCMC fit:
+You can evaluate multiple proteins (e.g., Astrocytes and Microglia) simultaneously using `cbind()`:
 
 ```{r, fig.width = 6, fig.height = 5}
-# Fit a joint repulsion model for Microglia and PNNs
-fit_joint <- fit_spatial_boundary(
-  df = df,
-  y1 = "Microglia",
-  y2 = "PNNs",
-  latent_type = "radial",
+# Fit a joint model for Astrocytes and Microglia sharing the same spatial boundary
+fit_joint <- spatialbp(
+  cbind(Astrocytes, Microglia) ~ 1 + hinge(latent = radial_z),
+  data = df,
   iterations = 3000
 )
-
-# Plot the joint boundary
-plot(fit_joint)
 ```
+
+The Rust backend automatically scales to $N \times K$ dimensions, summing the likelihood across all markers to find the optimal shared ecological boundary!
 
 ---
 
-## 4. Advanced: Automatic Relationship Discovery
+## 4. Advanced: Conditional Boundaries & Smooth Ecotones
 
-If you have many channels, you can automatically discover their spatial interactions without manually running pairs. The `discover_spatial_relationships()` function runs combinatorial pairwise joint models and outputs a **Bayesian Spatial Network**:
+Biological boundaries are rarely rigid; they are often influenced by local covariates and exhibit smooth transition zones (ecotones).
+
+With `spatialbp`, you can add **covariate modifiers** to the boundary and specify `smooth = TRUE` to transition the hinge function into a Softplus approximation, estimating the smoothness parameter `rho`:
 
 ```{r}
-# Define a list of your stains
-stains_list <- list(
-  Astrocytes = df$Astrocytes,
-  Microglia = df$Microglia,
-  PNNs = df$PNNs
+# 1. Add tissue_thickness as a baseline covariate
+# 2. Let oxygen conditionally modify the slope (mod_beta)
+# 3. Use a smooth Softplus boundary instead of a hard breakpoint
+fit_advanced <- spatialbp(
+  Astrocytes ~ tissue_thickness + hinge(latent = radial_z, mod_beta = ~ oxygen, smooth = TRUE),
+  data = df,
+  iterations = 2000
 )
 
-# Run discovery
-results <- discover_spatial_relationships(
-  stains = stains_list,
-  latent_field = df$LatentInflame,
-  iterations = 2000,
-  bf_threshold = 10
-)
-
-# View the automatically classified network
-print(results$relationships)
+# The model now estimates a smoothness trace (rho)!
+summary(fit_advanced$rho_trace)
 ```
-
-This returns a clear table classifying each pair as **Affinity**, **Repulsion**, or **Independent** based on their joint MCMC Bayes Factors!
 
 ---
 

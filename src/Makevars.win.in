@@ -31,7 +31,7 @@ $(STATLIB):
 	fi
 
 	# Always configure the linker for Windows GNU target to use gcc
-	echo "" >> $(CARGOTMP)/config.toml
+	echo "" > $(CARGOTMP)/config.toml
 	echo "[target.$(TARGET)]" >> $(CARGOTMP)/config.toml
 	echo "linker = \"gcc\"" >> $(CARGOTMP)/config.toml
 

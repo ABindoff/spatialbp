@@ -31,4 +31,6 @@ run_spatial_mcmc <- function(observed, baseline, latent, iterations, init_beta, 
 #' @export
 run_joint_mcmc <- function(y1, y2, baseline1, baseline2, latent, mode, iterations, init_beta1, init_beta2, init_c, sd_beta1, sd_beta2, sd_c, lambda1, lambda2) .Call(wrap__run_joint_mcmc, y1, y2, baseline1, baseline2, latent, mode, iterations, init_beta1, init_beta2, init_c, sd_beta1, sd_beta2, sd_c, lambda1, lambda2)
 
+run_formula_mcmc <- function(y, offset, baseline_matrix, latent, beta_covariates, c_covariates, num_baseline, num_beta, num_c, num_responses, smooth, iterations, lambda, sd_beta, sd_c) .Call(wrap__run_formula_mcmc, y, offset, baseline_matrix, latent, beta_covariates, c_covariates, num_baseline, num_beta, num_c, num_responses, smooth, iterations, lambda, sd_beta, sd_c)
+
 # nolint end

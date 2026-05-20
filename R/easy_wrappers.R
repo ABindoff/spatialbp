@@ -324,14 +324,17 @@ plot_diagnostics <- function(x, warmup = 1000, ...) {
 }
 
 #' @export
-plot_diagnostics.spatialbp_fit <- function(x, warmup = 1000, ...) {
+plot_diagnostics.spatialbp <- function(x, warmup = NULL, ...) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     stop("ggplot2 is required for plotting diagnostics.")
   }
   
-  fit_trace <- x$fit
-  c_trace <- fit_trace$c
-  ll_trace <- fit_trace$log_likelihood
+  if (is.null(warmup)) {
+    warmup <- if (!is.null(x$warmup)) x$warmup else 1000
+  }
+  
+  c_trace <- x$traces$cp
+  ll_trace <- x$log_likelihood
   
   total_iters <- length(c_trace)
   burn_samples <- min(as.integer(warmup), total_iters - 10)

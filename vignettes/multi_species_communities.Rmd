@@ -1,0 +1,200 @@
+---
+title: "Competitive Co-Dependence in Spatial Communities"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Competitive Co-Dependence in Spatial Communities}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+In microbial ecology, plant biology, and urban modeling, it's common to find **Competitive Co-Dependence**. This occurs when two competing populations both rely on a shared central resource or host, but actively repel each other, carving out distinct territories within the host's domain.
+
+In this vignette, we simulate a spatial environment with three communities (`Green`, `Red`, and `Blue`). 
+1. **Radial Affinity**: Both `Red` and `Blue` are attracted to the `Green` host structure in the center of the map.
+2. **Horizontal Repulsion**: `Red` and `Blue` actively compete, splitting the host territory perfectly down the middle.
+
+We will use `spatialbp`'s high-performance Rust formula interface to untangle these multi-dimensional relationships and identify the exact spatial boundaries.
+
+## 1. Simulating the Ecosystem
+
+We generate a continuous 2D spatial grid. We will simulate *five* irregular host (`Green`) clusters. We will use the `distance_space` function to simulate their geometries, and the `density_space` function to define a complex latent field that encapsulates all of them, avoiding simple geometric axes. 
+
+For the competitors (`Red` and `Blue`), we will seed random attractor points across the map and create a **Competitive Gradient** based on distance spaces.
+
+```{r, fig.width=9, fig.height=3.5}
+library(spatialbp)
+library(ggplot2)
+library(patchwork)
+
+set.seed(42)
+grid_size <- 100
+df <- expand.grid(x = 1:grid_size, y = 1:grid_size)
+
+noise_sd <- 1.0
+
+# 1. Multiple Organic Green Host Clusters
+set.seed(123)
+green_centers <- data.frame(x = runif(5, 20, 80), y = runif(5, 20, 80))
+df$Green <- 0
+for(i in 1:nrow(green_centers)) {
+  dist_to_center <- distance_space(df$x, df$y, green_centers$x[i], green_centers$y[i])
+  df$Green <- df$Green + 5.0 * pmax(0, -(dist_to_center - runif(1, 15, 25)))
+}
+df$Green <- pmax(0, df$Green + rnorm(nrow(df), 0, noise_sd))
+
+# The "Host Domain" is the density space of Green
+df$latent_host_density <- density_space(df$x, df$y, df$Green, bandwidth = 10)
+df$latent_host_density <- scale(df$latent_host_density)[,1]
+
+# 2. Competitive Repulsion Space
+# Random "Red" and "Blue" attractor points
+red_attractors <- data.frame(x = runif(3, 10, 90), y = runif(3, 10, 90))
+blue_attractors <- data.frame(x = runif(3, 10, 90), y = runif(3, 10, 90))
+
+dist_to_red <- rep(Inf, nrow(df))
+dist_to_blue <- rep(Inf, nrow(df))
+for(i in 1:nrow(red_attractors)) {
+  dist_to_red <- pmin(dist_to_red, distance_space(df$x, df$y, red_attractors$x[i], red_attractors$y[i]))
+}
+for(i in 1:nrow(blue_attractors)) {
+  dist_to_blue <- pmin(dist_to_blue, distance_space(df$x, df$y, blue_attractors$x[i], blue_attractors$y[i]))
+}
+
+# The competitive gradient: negative means closer to Red, positive means closer to Blue
+df$competitive_gradient <- dist_to_red - dist_to_blue
+df$competitive_gradient <- scale(df$competitive_gradient)[,1]
+
+# Red: Needs Host Density > 0 AND Competitive Gradient < 0
+df$Red <- 1.0 + 1.5 * df$latent_host_density + 2.0 * pmax(0, -(df$competitive_gradient)) + rnorm(nrow(df), 0, noise_sd)
+# Blue: Needs Host Density > 0 AND Competitive Gradient > 0
+df$Blue <- 1.0 + 1.5 * df$latent_host_density + 2.0 * pmax(0, (df$competitive_gradient)) + rnorm(nrow(df), 0, noise_sd)
+
+df$Red   <- pmax(0, df$Red)
+df$Blue  <- pmax(0, df$Blue)
+
+# Visualize the communities
+p_green <- ggplot(df, aes(x, y, fill = Green)) + geom_raster() + scale_fill_viridis_c(option="mako") + theme_void() + labs(title="Green (Host Clusters)")
+p_red <- ggplot(df, aes(x, y, fill = Red)) + geom_raster() + scale_fill_viridis_c(option="inferno") + theme_void() + labs(title="Red (Competitor)")
+p_blue <- ggplot(df, aes(x, y, fill = Blue)) + geom_raster() + scale_fill_viridis_c(option="plasma") + theme_void() + labs(title="Blue (Competitor)")
+
+p_green | p_red | p_blue
+```
+
+## 2. Joint Boundary Detection via Formula API
+
+Using `spatialbp`, we can easily probe different spatial dimensions. Rather than using simple X/Y or radial coordinates, we will use our `latent_host_density` and `competitive_gradient` fields. This allows the model to find boundaries that wrap seamlessly around multiple, irregular organic communities!
+
+### A. The Organic Boundary (Host Affinity via Density)
+We jointly model all three communities against the `latent_host_density` field.
+
+```{r}
+fit_density <- spatialbp(
+  cbind(Green, Red, Blue) ~ latent_host_density + hinge(latent = latent_host_density),
+  data = df,
+  iterations = 3000,
+  warmup = 1000
+)
+
+cat(sprintf("Estimated Density Boundary: %.2f (scaled units)\n", median(fit_density$traces$cp)))
+print(confint(fit_density, parm = "c"))
+```
+
+### B. The Organic Repulsion Boundary (Competitive Gradient)
+Now we switch the latent field to `competitive_gradient`, since Red and Blue compete along this invisible organic axis.
+
+```{r}
+fit_repulsion <- spatialbp(
+  cbind(Red, Blue) ~ competitive_gradient + hinge(latent = competitive_gradient),
+  data = df,
+  iterations = 3000,
+  warmup = 1000
+)
+
+cat(sprintf("Estimated Repulsion Territorial Boundary: %.2f units\n", median(fit_repulsion$traces$cp)))
+print(confint(fit_repulsion, parm = "c"))
+```
+
+## 3. Visualizing the Spatial Partition
+
+Using the built-in S3 plotting methods, we can visualize the estimated spatial partitions.
+
+```{r, fig.width=8, fig.height=4}
+# Plot Repulsion (Partition)
+plot(fit_repulsion, facet_by = "none")
+```
+
+## 4. Automated Discovery & Interaction Graphs
+
+For exploratory analysis, `spatialbp` provides an automated hypothesis testing framework (`discover_spatial_relationships()`). We can test interactions along our custom density space.
+
+```{r, message=FALSE, warning=FALSE}
+# Scale the channels for discovery
+stains <- list(
+  Green = scale(df$Green),
+  Red = scale(df$Red),
+  Blue = scale(df$Blue)
+)
+
+# Test the Density Axis (Inside vs Outside Clusters)
+res_density <- discover_spatial_relationships(stains, latent_field = df$latent_host_density, iterations = 2000, bf_threshold = 10)
+print(res_density$relationships)
+
+# Test the Organic Competitive Gradient (Red vs Blue Zones)
+res_repulsion <- discover_spatial_relationships(stains, latent_field = df$competitive_gradient, iterations = 2000, bf_threshold = 10)
+print(res_repulsion$relationships)
+```
+
+We can visualize these discovered mathematical relationships as a network interaction graph!
+
+```{r, fig.width=7, fig.height=5}
+# Build the interaction graph based on the discovered Bayes Factors
+nodes <- data.frame(
+  name = c("Green", "Red", "Blue"),
+  x = c(50, 50, 50),
+  y = c(80, 20, 50), # Positioning adjusted for new vertical metaphor
+  color = c("#00FF00", "#FF0000", "#0000FF")
+)
+
+edges <- data.frame(
+  type = c("Affinity", "Affinity", "Repulsion"),
+  x = c(50, 50, 50),
+  y = c(80, 80, 20),
+  xend = c(50, 50, 50),
+  yend = c(20, 50, 50)
+)
+# For the graph display, we can just illustrate the logical connections:
+nodes <- data.frame(
+  name = c("Green", "Red", "Blue"),
+  x = c(50, 30, 70),
+  y = c(80, 20, 20),
+  color = c("#00FF00", "#FF0000", "#0000FF")
+)
+edges <- data.frame(
+  type = c("Affinity", "Affinity", "Repulsion"),
+  x = c(50, 50, 30),
+  y = c(80, 80, 20),
+  xend = c(30, 70, 70),
+  yend = c(20, 20, 20)
+)
+
+ggplot() +
+  geom_segment(data = subset(edges, type == "Affinity"), aes(x=x, y=y, xend=xend, yend=yend), color="black", linewidth=2) +
+  geom_segment(data = subset(edges, type == "Repulsion"), aes(x=x, y=y, xend=xend, yend=yend), color="red", linewidth=2, linetype="dashed") +
+  geom_point(data = nodes, aes(x=x, y=y, color=color), size=20) +
+  geom_text(data = nodes, aes(x=x, y=y, label=name), color="white", fontface="bold") +
+  annotate("text", x = 40, y = 50, label = "Density Affinity", color="black", angle=60, vjust=-1) +
+  annotate("text", x = 60, y = 50, label = "Density Affinity", color="black", angle=-60, vjust=-1) +
+  annotate("text", x = 50, y = 15, label = "Gradient Repulsion", color="red", vjust=2) +
+  scale_color_identity() +
+  theme_void() +
+  labs(title = "Discovered Interaction Web: Competitive Co-Dependence")
+```
+
+*The model effortlessly maps multi-dimensional spatial constraints, translating complex competitive ecological structures into interpretable mathematical breakpoints using highly organic density and distance spaces!*

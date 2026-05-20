@@ -88,44 +88,39 @@ We want to find the exact radial distance where the *Laccaria* fungal network ab
 
 ```{r, fig.width = 6, fig.height = 5}
 # Fit the exact spatial root-zone boundary for Laccaria
-fit_lac <- fit_spatial_boundary(
-  df = df,
-  y1 = "Laccaria_Density",
-  latent_col = "Distance_To_Tree",
+fit_lac <- spatialbp(
+  Laccaria_Density ~ 1 + hinge(latent = Distance_To_Tree),
+  data = df,
   iterations = 3000
 )
 
-cat("Estimated Laccaria boundary radius:", round(fit_lac$optimal_c, 2), "meters from the tree.\n")
-
-# Plot the continuous boundary ring
-plot(fit_lac)
+opt_c_lac <- median(fit_lac$traces$cp)
+cat("Estimated Laccaria boundary radius:", round(opt_c_lac, 2), "meters from the tree.\n")
 ```
 
 The MCMC sampler mathematically confirms the visual drop-off, identifying the strict symbiotic boundary at a specific radius surrounding the tree.
 
 ---
 
-## 4. Modeling Species Interactions: Joint Affinity vs Repulsion
+## 4. Modeling Species Interactions: Joint Multivariate Boundaries
 
-Now, we introduce the second species: *Hebeloma spp.* Do these two fungal species collaborate and occupy the exact same root zone boundary (**Joint Affinity**), or do they compete for space, forcing one species to grow closer to the tree while the other occupies the outer perimeter (**Joint Repulsion**)?
+Now, we introduce the second species: *Hebeloma spp.* Do these two fungal species collaborate and occupy the exact same root zone boundary? We can evaluate this jointly!
 
-We pass both species into `fit_spatial_boundary()` simultaneously. The Rust engine automatically computes their spatial cross-correlation and selects the correct joint likelihood model!
+We pass both species into `spatialbp()` simultaneously using `cbind()`. The Rust engine automatically scales to multi-dimensional responses, sharing the physical boundary parameter but computing unique baseline and slope estimates for each species!
 
 ```{r, fig.width = 6, fig.height = 5}
 # Fit the Joint Species Interaction Model
-fit_joint <- fit_spatial_boundary(
-  df = df,
-  y1 = "Laccaria_Density",
-  y2 = "Hebeloma_Density",
-  latent_col = "Distance_To_Tree",
+fit_joint <- spatialbp(
+  cbind(Laccaria_Density, Hebeloma_Density) ~ 1 + hinge(latent = Distance_To_Tree),
+  data = df,
   iterations = 15000
 )
 
-# Plot the joint biological boundary overlaying the dominant species
-plot(fit_joint)
+opt_c_joint <- median(fit_joint$traces$cp)
+cat("Estimated Joint boundary radius:", round(opt_c_joint, 2), "meters from the tree.\n")
 ```
 
-**Interpretation:** The engine automatically detected a **Repulsion** relationship (highlighted by the bright chartreuse green boundary ring)! *Laccaria* and *Hebeloma* actively segregate and compete for radial space. One species strongly colonizes the inner root core, while the other is pushed entirely to the outer perimeter, perfectly separated by this estimated 33m spatial boundary!
+**Interpretation:** The engine simultaneously fits a shared boundary for both *Laccaria* and *Hebeloma*, revealing the core symbiotic ecotone they both interact with!
 
 ---
 
@@ -138,10 +133,10 @@ To understand exactly how the MCMC sampler made this decision, we can plot the r
 p_grad <- ggplot(df, aes(x = Distance_To_Tree, y = Laccaria_Density, color = Hebeloma_Density)) +
   geom_point(alpha = 0.6, size = 2) +
   scale_color_viridis_c(option = "plasma") +
-  geom_vline(xintercept = fit_joint$optimal_c, color = "cyan", linetype = "dashed", linewidth = 1.2) +
+  geom_vline(xintercept = opt_c_joint, color = "cyan", linetype = "dashed", linewidth = 1.2) +
   labs(
     title = "Fungal Symbiosis Ecotone vs Radial Distance",
-    subtitle = paste("Joint Repulsion Boundary estimated at", round(fit_joint$optimal_c, 2), "meters"),
+    subtitle = paste("Joint Boundary estimated at", round(opt_c_joint, 2), "meters"),
     x = "Distance from Birch Tree (meters)",
     y = "Laccaria Density"
   ) +

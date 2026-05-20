@@ -1,4 +1,4 @@
-library(spatialbp)
+devtools::load_all()
 library(ggplot2)
 library(patchwork)
 library(dplyr)
@@ -18,7 +18,7 @@ df <- expand.grid(x = 1:grid_size, y = 1:grid_size)
 center_x <- 50
 center_y <- 50
 df$radial_z <- sqrt((df$x - center_x)^2 + (df$y - center_y)^2)
-df$horizontal_z <- df$x
+df$horizontal_z <- as.numeric(df$x)
 
 noise_sd <- 2.0
 

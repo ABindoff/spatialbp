@@ -4,12 +4,12 @@
 \alias{plot_diagnostics}
 \title{Plot MCMC Diagnostic Traces}
 \usage{
-plot_diagnostics(x, burn_in = 0.2, ...)
+plot_diagnostics(x, warmup = 1000, ...)
 }
 \arguments{
 \item{x}{A `spatialbp_fit` object.}
 
-\item{burn_in}{Numeric, fraction of iterations to discard as burn-in (default is 0.2, i.e., 20%).}
+\item{warmup}{Integer, number of iterations to discard as warmup (default is 1000).}
 
 \item{...}{Unused.}
 }

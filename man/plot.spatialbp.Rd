@@ -4,12 +4,16 @@
 \alias{plot.spatialbp}
 \title{Plot a 2D Spatial Piecewise Regression}
 \usage{
-\method{plot}{spatialbp}(x, ...)
+\method{plot}{spatialbp}(x, z_slice = NULL, t_slice = NULL, facet_by = NULL, ...)
 }
 \arguments{
-\item{x}{An object of class spatialbp}
+\item{z_slice}{Numeric (optional), specific Z-slice to display for 3D/4D data.}
 
-\item{...}{Additional arguments passed to plotting functions}
+\item{t_slice}{Numeric (optional), specific time-point to display for 4D data.}
+
+\item{facet_by}{Character (optional), column name to facet by.}
+
+\item{...}{Unused.}
 }
 \description{
 Intercepts the generic plot() call to prevent smoothbp from trying to draw

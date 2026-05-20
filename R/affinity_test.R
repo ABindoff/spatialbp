@@ -90,6 +90,10 @@ discover_spatial_relationships <- function(stains, latent_field, iterations = 50
     stop("Need at least two stains to discover relationships.")
   }
   
+  latent_mean <- mean(latent_field, na.rm = TRUE)
+  latent_sd <- sd(latent_field, na.rm = TRUE)
+  if (is.na(latent_sd) || latent_sd == 0) latent_sd <- 1.0
+
   # 1. Precompute Independent Fits to establish baseline log-likelihoods
   message("Precomputing independent baseline models...")
   indep_ll <- list()
@@ -100,10 +104,10 @@ discover_spatial_relationships <- function(stains, latent_field, iterations = 50
       baseline = rep(0, length(stains[[name]])),
       latent = latent_field,
       iterations = iterations,
-      init_beta = 1.0, init_c = 0.0,
-      sd_beta = 0.1, sd_c = 0.1, lambda = 0.0
+      init_beta = 1.0, init_c = latent_mean,
+      sd_beta = 0.1, sd_c = latent_sd, lambda = 0.0
     )
-    indep_ll[[name]] <- mean(fit_indep$log_likelihood)
+    indep_ll[[name]] <- mean(fit_indep$log_likelihood, na.rm = TRUE)
   }
   
   # Initialize results structures
@@ -139,12 +143,12 @@ discover_spatial_relationships <- function(stains, latent_field, iterations = 50
       latent = latent_field,
       mode = "affinity",
       iterations = iterations,
-      init_beta1 = 1, init_beta2 = 1, init_c = 0,
-      sd_beta1 = 0.1, sd_beta2 = 0.1, sd_c = 0.1,
+      init_beta1 = 1, init_beta2 = 1, init_c = latent_mean,
+      sd_beta1 = 0.1, sd_beta2 = 0.1, sd_c = latent_sd,
       lambda1 = 0.0, lambda2 = 0.0
     )
-    ll_affinity <- mean(fit_aff$log_likelihood)
-    bf_aff <- exp(ll_affinity - ll_null)
+    ll_affinity <- mean(fit_aff$log_likelihood, na.rm = TRUE)
+    log_bf_aff <- ll_affinity - ll_null
     
     # Fit Repulsion
     message("  Fitting Joint Repulsion...")
@@ -154,14 +158,17 @@ discover_spatial_relationships <- function(stains, latent_field, iterations = 50
       latent = latent_field,
       mode = "repulsion",
       iterations = iterations,
-      init_beta1 = 1, init_beta2 = 1, init_c = 0,
-      sd_beta1 = 0.1, sd_beta2 = 0.1, sd_c = 0.1,
+      init_beta1 = 1, init_beta2 = 1, init_c = latent_mean,
+      sd_beta1 = 0.1, sd_beta2 = 0.1, sd_c = latent_sd,
       lambda1 = 0.0, lambda2 = 0.0
     )
-    ll_repulsion <- mean(fit_rep$log_likelihood)
-    bf_rep <- exp(ll_repulsion - ll_null)
+    ll_repulsion <- mean(fit_rep$log_likelihood, na.rm = TRUE)
+    log_bf_rep <- ll_repulsion - ll_null
     
-    # Save to matrices
+    # Save to matrices (cap at 700 to prevent Inf)
+    bf_aff <- exp(min(700, max(-700, log_bf_aff)))
+    bf_rep <- exp(min(700, max(-700, log_bf_rep)))
+    
     idx1 <- which(stain_names == s1)
     idx2 <- which(stain_names == s2)
     bf_matrix_affinity[idx1, idx2] <- bf_aff
@@ -169,11 +176,13 @@ discover_spatial_relationships <- function(stains, latent_field, iterations = 50
     bf_matrix_repulsion[idx1, idx2] <- bf_rep
     bf_matrix_repulsion[idx2, idx1] <- bf_rep
     
-    # Classification logic based on Bayes Factors
+    # Classification logic based on Log-Bayes Factors
+    log_threshold <- log(bf_threshold)
     classification <- "Independent"
-    if (bf_aff > bf_threshold && bf_aff > bf_rep) {
+    
+    if (log_bf_aff > log_threshold && log_bf_aff > log_bf_rep) {
       classification <- "Affinity"
-    } else if (bf_rep > bf_threshold && bf_rep > bf_aff) {
+    } else if (log_bf_rep > log_threshold && log_bf_rep > log_bf_aff) {
       classification <- "Repulsion"
     }
     
