@@ -52,3 +52,6 @@ rsconnect/
 src/rust/vendor
 src/Makevars
 src/Makevars.win
+
+# AI Reproducibility Auditor
+.repro/
